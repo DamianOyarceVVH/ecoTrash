@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ecoTrash - Clasificación en Vivo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0B0C10;
+        }
+        #videoStream {
+            width: 100%;
+            height: auto;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+        }
+        .info-card {
+            background-color: #111319;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+            margin-top: 1.5rem;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+<div class="max-w-4xl mx-auto">
+    <header class="text-center mb-8">
+        <h1 class="text-3xl md:text-4xl font-extrabold text-gray-800">
+            <span class="text-green-500">Reco</span>Trash
+        </h1>
+        <p class="text-gray-500 mt-2">Clasificación de Residuos en Tiempo Real</p>
+    </header>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Columna del Video -->
+        <div>
+            <h2 class="text-xl font-semibold text-gray-700 mb-2">Visión de la Cámara</h2>
+            <video id="video" autoplay class="rounded shadow-md w-full"></video>
+            <button id="snap" class="mt-2 px-4 py-2 bg-green-500 text-white rounded">Tomar Foto</button>
+            <img id="videoStream" src="/static/fotos/foto.jpg" alt="Foto capturada" class="mt-2 rounded shadow-md">
+            <p class="text-sm text-gray-400 mt-2 text-center">
+                Asegúrate de que tu celular y la PC estén en la misma red Wi-Fi.
+            </p>
+        </div>
+
+        <!-- Columna de Información -->
+        <div>
+            <h2 class="text-xl font-semibold text-gray-700 mb-2">Información de Clasificación</h2>
+
+            <!-- Tarjeta de Material Identificado -->
+            <div class="info-card">
+                <div class="flex items-center mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                    <h3 class="text-lg font-semibold text-gray-800">Material Identificado:</h3>
+                </div>
+                <p id="materialIdentificado" class="text-2xl font-bold text-gray-600">Esperando...</p>
+                <p id="confidence" class="text-sm text-gray-400 mt-1">Confianza: --%</p>
+            </div>
+
+            <!-- Tarjeta de Contenedor Asignado -->
+            <div class="info-card">
+                <div class="flex items-center mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <h3 class="text-lg font-semibold text-gray-800">Contenedor Asignado:</h3>
+                </div>
+                <div class="flex items-center mt-2">
+                    <div id="contenedorColor" class="w-8 h-8 rounded-full border-2 border-gray-300"></div>
+                    <p id="contenedorAsignado" class="ml-4 text-2xl font-bold text-gray-600">--</p>
+                </div>
+            </div>
+
+            <!-- Tarjeta de Mensaje de Retroalimentación -->
+            <div class="info-card">
+                <div class="flex items-center mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    <h3 class="text-lg font-semibold text-gray-800">Mensaje:</h3>
+                </div>
+                <p id="feedbackMessage" class="text-base text-gray-600 italic">Esperando que se detecte un objeto...</p>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+const video = document.getElementById('video');
+const snap = document.getElementById('snap');
+const foto = document.getElementById('videoStream');
+
+// Acceder a la cámara del celular
+navigator.mediaDevices.getUserMedia({ video: true })
+.then(stream => { video.srcObject = stream; })
+.catch(err => { alert('Error al acceder a la cámara: ' + err); });
+
+// Tomar foto y enviar al servidor
+snap.addEventListener('click', () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    const dataURL = canvas.toDataURL('image/jpeg');
+
+    // Mostrar la foto en la página
+    foto.src = dataURL;
+
+    // Enviar al servidor Flask
+    fetch('/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'imageBase64=' + encodeURIComponent(dataURL)
+    }).then(res => console.log('Foto enviada al servidor'));
+});
+</script>
+
+</body>
+</html>
