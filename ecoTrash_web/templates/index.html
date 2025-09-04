@@ -57,22 +57,18 @@
   </div>
 </div>
 
-<!-- Socket.IO client -->
-<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
-
 <script>
 const video = document.getElementById('video');
 const snap = document.getElementById('snap');
 const foto = document.getElementById('videoStream');
 const status = document.getElementById('status');
 
-let socket = null;
 let isCapturing = false;
 
 // Start camera
 async function startCamera(){
   try {
-    const constraints = { video: true };
+    const constraints = { video: { facingMode: "environment" } };
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     video.srcObject = stream;
     status.innerText = "Cámara lista";
@@ -147,7 +143,7 @@ async function uploadDataURL(dataURL) {
   }
 }
 
-// Mapas de nombre (si el servidor ya manda "Botella de plástico" se usará directo)
+// Mapas de nombre
 const materialMap = {
   "plastico": "Botella de plástico",
   "plástico": "Botella de plástico",
@@ -169,7 +165,6 @@ function mapMaterialName(raw) {
 
 function applyInferenceToUI(data){
   if(!data) return;
-  // Si el servidor marca is_unknown true -> tratar como no reciclable
   const isUnknown = !!data.is_unknown;
   const mappedMaterial = isUnknown ? "No reciclable" : mapMaterialName(data.material || "");
   document.getElementById("materialIdentificado").innerText = mappedMaterial || "--";
@@ -204,49 +199,6 @@ snap.addEventListener('click', async () => {
   await uploadDataURL(dataURL);
   isCapturing = false;
 });
-
-// Socket.IO
-function initSocketIO(){
-  try {
-    socket = io({ transports: ['websocket'], autoConnect: true });
-  } catch (e) {
-    console.error("Error inicializando socket.io client:", e);
-    status.innerText = "Error SocketIO";
-    return;
-  }
-
-  socket.on('connect', () => {
-    console.info("Socket.IO conectado:", socket.id);
-    status.innerText = "WebSocket conectado";
-  });
-  socket.on('connect_error', (err) => {
-    console.error("connect_error", err);
-    status.innerText = "Error conexión WS";
-  });
-  socket.on('disconnect', (reason) => {
-    console.warn("Socket desconectado:", reason);
-    status.innerText = "WS desconectado";
-  });
-
-  socket.on('trigger_capture', async (payload) => {
-    console.info("trigger_capture recibido:", payload);
-    if(isCapturing) return;
-    isCapturing = true;
-    status.innerText = "Trigger: tomando foto...";
-    const dataURL = takePhotoDataURL();
-    foto.src = dataURL;
-    await uploadDataURL(dataURL);
-    isCapturing = false;
-  });
-
-  socket.on('inference', (payload) => {
-    console.info("inference recibido:", payload);
-    applyInferenceToUI(payload);
-    reloadFotoImg();
-  });
-}
-
-initSocketIO();
 </script>
 </body>
 </html>

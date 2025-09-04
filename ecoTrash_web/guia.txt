@@ -28,9 +28,8 @@ Instalar dependencias mínimas:
 pip install --upgrade pip
 pip install flask pillow numpy tensorflow
 
-
 tensorflow puede tardar y ocupar mucho. Si ya tienes un ambiente que funciona, usa ese. Si tu CPU es Intel/AMD, la versión pip install tensorflow instalará TF con aceleración oneDNN.
 
 Si pip install tensorflow da errores por espacio o versión, dinos el error y ajustamos.
 
-python app.py --host 0.0.0.0 --port 5000 --tcp-port 6000  
+python app.py --host 0.0.0.0 --port 5000 

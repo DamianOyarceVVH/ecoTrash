@@ -1,13 +1,9 @@
 import os
 import io
 import re
-import uuid
 import json
-import time
-import socket
 import base64
 import logging
-import threading
 import unicodedata
 from datetime import datetime
 from typing import Optional
@@ -15,7 +11,7 @@ from typing import Optional
 import numpy as np
 from PIL import Image, ImageOps
 
-# Preferir tflite_runtime si existe
+# Preferir tflite_runtime si existe, sino tensorflow
 Interpreter = None
 try:
     from tflite_runtime.interpreter import Interpreter  # type: ignore
@@ -24,21 +20,21 @@ except Exception:
         import tensorflow as tf  # type: ignore
         Interpreter = tf.lite.Interpreter
     except Exception:
-        raise SystemExit("Instala 'tensorflow' o 'tflite-runtime' (ver README).")
+        raise SystemExit("Instala 'tensorflow' o 'tflite-runtime' para usar TFLite.")
 
-# OpenCV (para fallback capture)
+# OpenCV opcional para /capture
 try:
     import cv2  # type: ignore
 except Exception:
     cv2 = None
 
 from flask import Flask, request, jsonify, render_template, Response
-from flask_socketio import SocketIO
 
 # -------------------------
-# Config
+# Configuración paths / app
 # -------------------------
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 STATIC_FOTOS = os.path.join(STATIC_DIR, "fotos")
 MODELOS_DIR = os.path.join(BASE_DIR, "modelos")
@@ -55,35 +51,17 @@ LABELS_PATH_CANDIDATES = [
     os.path.join(BASE_DIR, "labels.txt"),
 ]
 
-# Guardar siempre con este nombre (se reemplaza)
 LAST_FILENAME = "foto.jpg"
 LAST_PATH = os.path.join(STATIC_FOTOS, LAST_FILENAME)
 
-# límites / resoluciones
-MAX_W, MAX_H = 1280, 720
-CAPTURE_W, CAPTURE_H = 640, 480
+# Threshold para considerar UNKNOWN (si confidence < threshold -> "No reciclable")
+UNKNOWN_THRESHOLD = float(os.getenv("UNKNOWN_THRESHOLD", "0.80"))
 
-# Threshold para considerar UNKNOWN (configurable por variable de entorno)
-UNKNOWN_THRESHOLD = float(os.getenv("UNKNOWN_THRESHOLD", "0.98"))
-
-# TCP listener para Raspberry
-TCP_LISTENER_PORT = 6000
-
-# SocketIO: forzamos threading en Windows (no usar eventlet aquí)
-async_mode = "threading"
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode=async_mode)
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("ecoTrash")
-
-# Lock para acceso concurrente al intérprete
-infer_lock = threading.Lock()
-
-# Contador de clientes conectados
-connected_clients = set()
-clients_lock = threading.Lock()
 
 # -------------------------
 # Utilidades
@@ -105,7 +83,7 @@ def ensure_rgb(img: Image.Image) -> Image.Image:
         img = img.convert("RGB")
     return img
 
-def downscale(img: Image.Image, max_w: int, max_h: int) -> Image.Image:
+def downscale(img: Image.Image, max_w: int = 1280, max_h: int = 720) -> Image.Image:
     img = ImageOps.exif_transpose(img)
     w, h = img.size
     if w <= max_w and h <= max_h:
@@ -126,7 +104,7 @@ def is_image_mimetype(mtype: str) -> bool:
     return mtype and mtype.lower().startswith("image/")
 
 # -------------------------
-# Cargar modelo y labels
+# Cargar labels y modelo
 # -------------------------
 LABELS_PATH = pick_first_existing(LABELS_PATH_CANDIDATES)
 labels_original, labels_norm = [], []
@@ -134,19 +112,19 @@ if LABELS_PATH:
     try:
         with open(LABELS_PATH, "r", encoding="utf-8") as f:
             for line in f:
-                line = line.strip()
-                if not line:
+                l = line.strip()
+                if not l:
                     continue
-                parts = line.split()
+                parts = l.split()
                 if parts and parts[0].isdigit():
-                    line = " ".join(parts[1:])
-                labels_original.append(line)
-                labels_norm.append(normalize_label(line))
-        log.info("Etiquetas cargadas (%d).", len(labels_original))
+                    l = " ".join(parts[1:])
+                labels_original.append(l)
+                labels_norm.append(normalize_label(l))
+        log.info("Etiquetas cargadas (%d): %s", len(labels_original), labels_original)
     except Exception:
         log.exception("Error cargando labels.txt")
 else:
-    log.warning("No se encontró labels.txt; continuará sin etiquetas humanas.")
+    log.warning("No se encontró labels.txt; se usará índice de clases numérico.")
 
 MODEL_PATH = pick_first_existing(MODEL_PATH_CANDIDATES)
 if not MODEL_PATH:
@@ -158,7 +136,10 @@ interpreter.allocate_tensors()
 input_details = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
 
-# Contenedores (mapa simple). añadimos 'no_reciclable'
+log.info("Input details: %s", input_details[0]["shape"])
+log.info("Output details: %s", output_details[0]["shape"])
+
+# Contenedores y nombres de despliegue
 contenedores = {
     "plastico": ("Plástico", "#3B82F6"),
     "papel": ("Papel", "#FACC15"),
@@ -175,7 +156,7 @@ display_name_map = {
 }
 
 # -------------------------
-# Pre / post procesado modelo
+# Pre / post procesado del modelo
 # -------------------------
 def to_model_input(img: Image.Image, input_meta: dict) -> np.ndarray:
     img = ensure_rgb(img)
@@ -218,9 +199,9 @@ def extract_scores(raw_output: np.ndarray, output_meta: dict, labels_count: int)
         else:
             if class_axis != arr.ndim - 1:
                 arr = np.moveaxis(arr, class_axis, -1)
-            # Promediamos sobre spatial/otros ejes para obtener vector de clases robusto
+            # promedio sobre ejes espaciales para robustez
             scores = arr.reshape(-1, arr.shape[-1]).mean(axis=0)
-    # if logits scale -> softmax -> probabilities
+    # si parecen logits -> softmax
     if scores.max() > 1.01 or scores.min() < 0:
         ex = np.exp(scores - np.max(scores))
         scores = ex / np.clip(ex.sum(), 1e-8, None)
@@ -233,30 +214,29 @@ def extract_scores(raw_output: np.ndarray, output_meta: dict, labels_count: int)
     return np.clip(scores.astype(np.float32), 0.0, 1.0)
 
 # -------------------------
-# Pipeline: guardar -> inferir -> emitir
+# Pipeline: guardar -> inferir -> responder
 # -------------------------
-def run_pipeline_and_emit(pil_img: Image.Image, save_as_last: bool = True) -> dict:
+def run_pipeline(pil_img: Image.Image, save_as_last: bool = True) -> dict:
     pil_img = ensure_rgb(pil_img)
-    pil_img = downscale(pil_img, MAX_W, MAX_H)
+    pil_img = downscale(pil_img)
 
     if save_as_last:
         final_path = LAST_PATH
     else:
         now = datetime.now()
-        final_path = os.path.join(STATIC_FOTOS, f"{now.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}.jpg")
+        final_path = os.path.join(STATIC_FOTOS, f"{now.strftime('%Y%m%d_%H%M%S')}.jpg")
 
     atomic_save_jpeg(pil_img, final_path, quality=90)
 
-    # Inferencia (con lock)
-    with infer_lock:
-        model_input = to_model_input(pil_img, input_details[0])
-        try:
-            interpreter.set_tensor(input_details[0]["index"], model_input)
-        except Exception:
-            model_input = model_input.astype(input_details[0]["dtype"])
-            interpreter.set_tensor(input_details[0]["index"], model_input)
-        interpreter.invoke()
-        raw_output = interpreter.get_tensor(output_details[0]["index"])
+    # inferencia
+    model_input = to_model_input(pil_img, input_details[0])
+    try:
+        interpreter.set_tensor(input_details[0]["index"], model_input)
+    except Exception:
+        model_input = model_input.astype(input_details[0]["dtype"])
+        interpreter.set_tensor(input_details[0]["index"], model_input)
+    interpreter.invoke()
+    raw_output = interpreter.get_tensor(output_details[0]["index"])
 
     labels_count = max(1, len(labels_original)) if labels_original else 4
     scores = extract_scores(raw_output, output_details[0], labels_count)
@@ -270,10 +250,9 @@ def run_pipeline_and_emit(pil_img: Image.Image, save_as_last: bool = True) -> di
         raw_label = f"clase_{idx}"
         label_key = normalize_label(raw_label)
 
-    # Si la confianza es menor que el umbral, tratamos como "no_reciclable"
     is_unknown = False
     if conf < UNKNOWN_THRESHOLD:
-        log.info("Confianza %.4f < threshold %.4f -> marcado como NO RECONOCIDO", conf, UNKNOWN_THRESHOLD)
+        log.info("Confianza %.4f < threshold %.4f -> tratado como NO RECONOCIDO", conf, UNKNOWN_THRESHOLD)
         label_key = "no_reciclable"
         raw_label = "No reciclable"
         is_unknown = True
@@ -289,13 +268,7 @@ def run_pipeline_and_emit(pil_img: Image.Image, save_as_last: bool = True) -> di
         "color": color,
         "is_unknown": is_unknown
     }
-
-    # Emitir resultado por SocketIO (intenta emitir)
-    try:
-        socketio.emit("inference", payload)
-    except Exception:
-        log.exception("Error al emitir por SocketIO (emit inference)")
-    log.info("Inferencia emitida: %s", json.dumps(payload, ensure_ascii=False))
+    log.info("Resultado: %s", json.dumps(payload, ensure_ascii=False))
     return payload
 
 # -------------------------
@@ -306,7 +279,7 @@ def index():
     template_path = os.path.join(BASE_DIR, "templates", "index.html")
     if os.path.exists(template_path):
         return render_template("index.html")
-    return Response(DEFAULT_INDEX_HTML, mimetype="text/html")
+    return Response("<h2>ecoTrash</h2><p>Coloca templates/index.html</p>", mimetype="text/html")
 
 @app.route("/healthz")
 def healthz():
@@ -341,18 +314,19 @@ def upload():
             buf = io.BytesIO(file.read())
             buf.seek(0)
             pil_img = Image.open(buf)
+
+        # verificar/reabrir imagen para evitar problemas PIL
         try:
             pil_img.verify()
-            try:
-                if 'binary' in locals():
-                    pil_img = Image.open(io.BytesIO(binary.getvalue()))
-                else:
-                    buf.seek(0)
-                    pil_img = Image.open(buf)
-                pil_img.load()
-            except Exception:
-                pass
+            # reabrir
+            if 'binary' in locals():
+                pil_img = Image.open(io.BytesIO(binary.getvalue()))
+            else:
+                buf.seek(0)
+                pil_img = Image.open(buf)
+            pil_img.load()
         except Exception:
+            # fallback: reabrir stream
             try:
                 if 'file' in locals():
                     file.stream.seek(0)
@@ -366,20 +340,21 @@ def upload():
                 log.exception("Error reabriendo imagen")
                 return jsonify({"error": "Imagen inválida", "detail": str(e)}), 400
 
-        result = run_pipeline_and_emit(pil_img, save_as_last=True)
+        result = run_pipeline(pil_img, save_as_last=True)
         return jsonify(result), 200
 
     except Exception as e:
         log.exception("Error en /upload")
         return jsonify({"error": "Error al procesar la imagen", "detail": str(e)}), 500
 
-@app.route("/capture", methods=["GET", "POST"])
+@app.route("/capture", methods=["GET","POST"])
 def capture():
+    """Captura desde la webcam del servidor (solo si OpenCV está instalado)."""
     if cv2 is None:
-        return jsonify({"error": "OpenCV no instalado. Instala opencv-python"}), 500
+        return jsonify({"error": "OpenCV no instalado. Instala opencv-python si quieres /capture."}), 500
     try:
-        w = int(request.args.get("w", CAPTURE_W))
-        h = int(request.args.get("h", CAPTURE_H))
+        w = int(request.args.get("w", 640))
+        h = int(request.args.get("h", 480))
         cam = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         try:
             cam.set(cv2.CAP_PROP_FRAME_WIDTH, w)
@@ -389,7 +364,7 @@ def capture():
                 return jsonify({"error": "No se pudo leer de la cámara"}), 500
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             pil_img = Image.fromarray(frame)
-            result = run_pipeline_and_emit(pil_img, save_as_last=True)
+            result = run_pipeline(pil_img, save_as_last=True)
             return jsonify(result), 200
         finally:
             cam.release()
@@ -398,143 +373,15 @@ def capture():
         return jsonify({"error": "Error al capturar la imagen", "detail": str(e)}), 500
 
 # -------------------------
-# SocketIO handlers
-# -------------------------
-@socketio.on("connect")
-def on_connect():
-    with clients_lock:
-        connected_clients.add(threading.get_ident())
-    log.info("Cliente web conectado. Conexiones aprox: %d", len(connected_clients))
-
-@socketio.on("disconnect")
-def on_disconnect():
-    with clients_lock:
-        try:
-            connected_clients.remove(threading.get_ident())
-        except Exception:
-            pass
-    log.info("Cliente web desconectado. Conexiones aprox: %d", len(connected_clients))
-
-# -------------------------
-# TCP listener: Raspberry -> servidor
-# -------------------------
-def handle_tcp_connection(conn, addr):
-    try:
-        data = conn.recv(2048)
-        if not data:
-            conn.sendall(b"EMPTY")
-            return
-        text = data.decode(errors="ignore").strip()
-        log.info("TCP desde %s: %s", addr, text)
-        if text.upper().startswith("FOTO"):
-            client_count = 0
-            with clients_lock:
-                client_count = max(0, len(connected_clients))
-            if client_count > 0:
-                try:
-                    socketio.emit("trigger_capture", {"reason": "raspberry"})
-                    conn.sendall(b"TRIGGER_SENT")
-                    return
-                except Exception:
-                    log.exception("No se pudo emitir trigger_capture")
-            if cv2 is None:
-                conn.sendall(json.dumps({"error": "No hay cliente y OpenCV no instalado en servidor"}).encode())
-                return
-            try:
-                cam = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-                cam.set(cv2.CAP_PROP_FRAME_WIDTH, CAPTURE_W)
-                cam.set(cv2.CAP_PROP_FRAME_HEIGHT, CAPTURE_H)
-                ok, frame = cam.read()
-                cam.release()
-                if not ok:
-                    conn.sendall(json.dumps({"error": "No se pudo capturar desde la cámara del servidor"}).encode())
-                    return
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                pil_img = Image.fromarray(frame)
-                result = run_pipeline_and_emit(pil_img, save_as_last=True)
-                conn.sendall(json.dumps(result, ensure_ascii=False).encode('utf-8'))
-                return
-            except Exception as e:
-                log.exception("Error en fallback capture")
-                conn.sendall(json.dumps({"error": "Error interno", "detail": str(e)}).encode())
-                return
-        else:
-            conn.sendall(b"UNKNOWN_COMMAND")
-    except Exception:
-        log.exception("Error manejando conexión TCP")
-        try:
-            conn.sendall(b"ERROR")
-        except Exception:
-            pass
-    finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
-
-def tcp_listener(host="0.0.0.0", port=TCP_LISTENER_PORT):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    s.bind((host, port))
-    s.listen(5)
-    log.info("TCP listener activo en %s:%d", host, port)
-    while True:
-        try:
-            conn, addr = s.accept()
-            t = threading.Thread(target=handle_tcp_connection, args=(conn, addr), daemon=True)
-            t.start()
-        except Exception:
-            log.exception("Error en accept del TCP listener")
-
-# HTML fallback (mínimo)
-DEFAULT_INDEX_HTML = r"""<!doctype html><html lang="es"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>ecoTrash</title></head><body><h2>ecoTrash - Servidor</h2><p>Coloca templates/index.html si quieres UI completa.</p></body></html>"""
-
-# -------------------------
 # Main
 # -------------------------
-def find_ssl_files(explicit_cert: Optional[str], explicit_key: Optional[str]):
-    candidates = [
-        (explicit_cert, explicit_key) if explicit_cert and explicit_key else (None, None),
-        (os.path.join(BASE_DIR, "cert.pem"), os.path.join(BASE_DIR, "key.pem")),
-        (os.path.join(BASE_DIR, "cert.key"), os.path.join(BASE_DIR, "perm.key")),
-    ]
-    for cert, key in candidates:
-        if cert and key and os.path.exists(cert) and os.path.exists(key):
-            return (cert, key)
-    return None
-
-def main():
+if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="ecoTrash - servidor (HTTP/WS/TCP)")
+    parser = argparse.ArgumentParser(description="ecoTrash - servidor simplificado (sin Raspberry/TCP)")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=5000)
-    parser.add_argument("--tcp-port", type=int, default=TCP_LISTENER_PORT)
-    parser.add_argument("--ssl", action="store_true")
-    parser.add_argument("--cert")
-    parser.add_argument("--key")
+    parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
-    t = threading.Thread(target=tcp_listener, kwargs={"host":"0.0.0.0","port":args.tcp_port}, daemon=True)
-    t.start()
-
-    ssl_context = None
-    if args.ssl:
-        pair = find_ssl_files(args.cert, args.key)
-        if not pair:
-            log.error("No se encontraron certificados TLS (pasaste --ssl).")
-            raise SystemExit(1)
-        ssl_context = pair
-        log.info("TLS habilitado (modo explícito): %s", pair)
-    else:
-        auto_pair = find_ssl_files(None, None)
-        if auto_pair:
-            ssl_context = auto_pair
-            log.info("TLS habilitado automáticamente (se detectaron certificados): %s", auto_pair)
-        else:
-            log.info("No se encontraron certificados TLS; servidor iniciará en HTTP.")
-
-    log.info("Iniciando Flask/SocketIO en %s:%d (async_mode=%s) -- UNKNOWN_THRESHOLD=%s", args.host, args.port, async_mode, UNKNOWN_THRESHOLD)
-    socketio.run(app, host=args.host, port=args.port, ssl_context=ssl_context)
-
-if __name__ == "__main__":
-    main()
+    log.info("Iniciando servidor en %s:%d (UNKNOWN_THRESHOLD=%s)", args.host, args.port, UNKNOWN_THRESHOLD)
+    app.run(host=args.host, port=args.port, debug=args.debug)
