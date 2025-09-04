@@ -155,29 +155,42 @@ function applyInferenceToUIResult(probs) {
   // si la confianza es baja -> no reciclable
   let isUnknown = (maxProb < UNKNOWN_THRESHOLD);
 
+  // Nombre a mostrar en pantalla
   let displayName = isUnknown ? "No reciclable" : mapMaterialName(label);
-  const contenedor = (function(key){
-    // mapear contenedores según tu preferencia
-    if (key.startsWith("plast")) return "Plástico";
-    if (key.startsWith("papel")) return "Papel";
-    if (key.startsWith("metal")) return "Metal";
-    if (key.startsWith("organ")) return "Orgánico";
-    return "No reciclable";
-  })(label);
 
-  // Colores (sencillo)
-  const color = (function(key){
+  // Determinar contenedor: si es desconocido -> "No reciclable" explícito
+  let contenedor;
+  if (isUnknown) {
+    contenedor = "No reciclable";
+  } else {
+    // mapear contenedores según la etiqueta (solo cuando hay suficiente confianza)
+    if (label.startsWith("plast")) contenedor = "Plástico";
+    else if (label.startsWith("papel")) contenedor = "Papel";
+    else if (label.startsWith("metal")) contenedor = "Metal";
+    else if (label.startsWith("organ")) contenedor = "Orgánico";
+    else contenedor = "No reciclable";
+  }
+
+  // Colores (sencillo). Para unknown usamos gris consistente.
+  const color = (function(key, unknown){
+    if (unknown) return "#9CA3AF"; // gris (tailwind gray-400)
     if (key.startsWith("plast")) return "#3B82F6";
     if (key.startsWith("papel")) return "#FACC15";
     if (key.startsWith("metal")) return "#EF4444";
     if (key.startsWith("organ")) return "#22C55E";
     return "#9CA3AF";
-  })(label);
+  })(label, isUnknown);
 
+  // Aplicar a UI
   $("materialIdentificado").innerText = displayName;
   $("confidence").innerText = "Confianza: " + formatConfidence(maxProb);
   $("contenedorAsignado").innerText = contenedor;
-  $("contenedorColor").style.backgroundColor = color;
+
+  // Color del indicador: background + border para mayor contraste
+  const contColorEl = $("contenedorColor");
+  contColorEl.style.backgroundColor = color;
+  // elegir un borde ligeramente más oscuro/contraste para que se vea sobre fondo oscuro
+  contColorEl.style.borderColor = color === "#9CA3AF" ? "#6B7280" : color;
 
   if (isUnknown || displayName === "No reciclable") {
     $("feedbackMessage").innerText = "Objeto no identificado. Enviado a desechos no reciclables.";
