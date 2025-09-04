@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ecoTrash - Clasificación en Vivo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; background: #0B0C10; color:#E6E7EA; }
+  </style>
+</head>
+<body class="p-4 md:p-8">
+<div class="max-w-4xl mx-auto">
+  <header class="text-center mb-8">
+    <h1 class="text-3xl md:text-4xl font-extrabold">
+      <span class="text-green-500">Reco</span>Trash
+    </h1>
+    <p class="text-gray-400 mt-2">Clasificación de Residuos en Tiempo Real</p>
+  </header>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div>
+      <h2 class="text-xl mb-2">Visión de la Cámara</h2>
+      <video id="video" autoplay playsinline class="rounded shadow-md w-full bg-black"></video>
+      <div class="mt-2">
+        <button id="snap" class="px-4 py-2 bg-green-500 text-white rounded">Tomar Foto</button>
+        <span id="status" class="ml-3 text-sm text-gray-300">Esperando...</span>
+      </div>
+      <img id="videoStream" src="static-placeholder.jpg" alt="Foto capturada" class="mt-2 rounded shadow-md w-full" />
+      <p class="text-sm text-gray-400 mt-2 text-center">Asegúrate de tomar una foto de alguna tarjeta; si no, se identificará un objeto aleatorio o será marcado como no reciclable.</p>
+    </div>
+
+    <div>
+      <h2 class="text-xl mb-2">Información de Clasificación</h2>
+
+      <div class="info-card bg-gray-900 p-4 rounded mb-4">
+        <h3 class="font-semibold">Objeto Identificado</h3>
+        <p id="materialIdentificado" class="text-2xl font-bold mt-2">Esperando...</p>
+        <p id="confidence" class="text-sm text-gray-400 mt-1">Confianza: --%</p>
+      </div>
+
+      <div class="info-card bg-gray-900 p-4 rounded mb-4">
+        <h3 class="font-semibold">Contenedor Asignado</h3>
+        <div class="flex items-center mt-2">
+          <div id="contenedorColor" class="w-8 h-8 rounded-full border-2 border-gray-300"></div>
+          <p id="contenedorAsignado" class="ml-4 text-2xl font-bold">--</p>
+        </div>
+      </div>
+
+      <div class="info-card bg-gray-900 p-4 rounded">
+        <h3 class="font-semibold">Mensaje</h3>
+        <p id="feedbackMessage" class="italic mt-2">Esperando que se detecte un objeto...</p>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- TensorFlow.js -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.12.0/dist/tf.min.js"></script>
+<!-- tu lógica -->
+<script src="script.js" defer></script>
+</body>
+</html>
