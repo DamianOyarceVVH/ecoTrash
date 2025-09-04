@@ -1,129 +1,252 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ecoTrash - Clasificación en Vivo</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #0B0C10;
-        }
-        #videoStream {
-            width: 100%;
-            height: auto;
-            border-radius: 0.75rem;
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
-        }
-        .info-card {
-            background-color: #111319;
-            border-radius: 0.75rem;
-            padding: 1.5rem;
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
-            margin-top: 1.5rem;
-        }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ecoTrash - Clasificación en Vivo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; background: #0B0C10; color:#E6E7EA; }
+  </style>
 </head>
 <body class="p-4 md:p-8">
-
 <div class="max-w-4xl mx-auto">
-    <header class="text-center mb-8">
-        <h1 class="text-3xl md:text-4xl font-extrabold text-gray-800">
-            <span class="text-green-500">Reco</span>Trash
-        </h1>
-        <p class="text-gray-500 mt-2">Clasificación de Residuos en Tiempo Real</p>
-    </header>
+  <header class="text-center mb-8">
+    <h1 class="text-3xl md:text-4xl font-extrabold">
+      <span class="text-green-500">Reco</span>Trash
+    </h1>
+    <p class="text-gray-400 mt-2">Clasificación de Residuos en Tiempo Real</p>
+  </header>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <!-- Columna del Video -->
-        <div>
-            <h2 class="text-xl font-semibold text-gray-700 mb-2">Visión de la Cámara</h2>
-            <video id="video" autoplay class="rounded shadow-md w-full"></video>
-            <button id="snap" class="mt-2 px-4 py-2 bg-green-500 text-white rounded">Tomar Foto</button>
-            <img id="videoStream" src="/static/fotos/foto.jpg" alt="Foto capturada" class="mt-2 rounded shadow-md">
-            <p class="text-sm text-gray-400 mt-2 text-center">
-                Asegúrate de que tu celular y la PC estén en la misma red Wi-Fi.
-            </p>
-        </div>
-
-        <!-- Columna de Información -->
-        <div>
-            <h2 class="text-xl font-semibold text-gray-700 mb-2">Información de Clasificación</h2>
-
-            <!-- Tarjeta de Material Identificado -->
-            <div class="info-card">
-                <div class="flex items-center mb-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                    <h3 class="text-lg font-semibold text-gray-800">Material Identificado:</h3>
-                </div>
-                <p id="materialIdentificado" class="text-2xl font-bold text-gray-600">Esperando...</p>
-                <p id="confidence" class="text-sm text-gray-400 mt-1">Confianza: --%</p>
-            </div>
-
-            <!-- Tarjeta de Contenedor Asignado -->
-            <div class="info-card">
-                <div class="flex items-center mb-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    <h3 class="text-lg font-semibold text-gray-800">Contenedor Asignado:</h3>
-                </div>
-                <div class="flex items-center mt-2">
-                    <div id="contenedorColor" class="w-8 h-8 rounded-full border-2 border-gray-300"></div>
-                    <p id="contenedorAsignado" class="ml-4 text-2xl font-bold text-gray-600">--</p>
-                </div>
-            </div>
-
-            <!-- Tarjeta de Mensaje de Retroalimentación -->
-            <div class="info-card">
-                <div class="flex items-center mb-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                    </svg>
-                    <h3 class="text-lg font-semibold text-gray-800">Mensaje:</h3>
-                </div>
-                <p id="feedbackMessage" class="text-base text-gray-600 italic">Esperando que se detecte un objeto...</p>
-            </div>
-
-        </div>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div>
+      <h2 class="text-xl mb-2">Visión de la Cámara</h2>
+      <video id="video" autoplay playsinline class="rounded shadow-md w-full bg-black"></video>
+      <div class="mt-2">
+        <button id="snap" class="px-4 py-2 bg-green-500 text-white rounded">Tomar Foto</button>
+        <span id="status" class="ml-3 text-sm text-gray-300">Esperando...</span>
+      </div>
+      <img id="videoStream" src="/static/fotos/foto.jpg" alt="Foto capturada" class="mt-2 rounded shadow-md w-full" />
+      <p class="text-sm text-gray-400 mt-2 text-center">Asegúrate de tomar una foto de alguna tarjeta, si no, se identificará un objeto aleatorio o será marcado como no reciclable.</p>
     </div>
+
+    <div>
+      <h2 class="text-xl mb-2">Información de Clasificación</h2>
+
+      <div class="info-card bg-gray-900 p-4 rounded mb-4">
+        <h3 class="font-semibold">Objeto Identificado</h3>
+        <p id="materialIdentificado" class="text-2xl font-bold mt-2">Esperando...</p>
+        <p id="confidence" class="text-sm text-gray-400 mt-1">Confianza: --%</p>
+      </div>
+
+      <div class="info-card bg-gray-900 p-4 rounded mb-4">
+        <h3 class="font-semibold">Contenedor Asignado</h3>
+        <div class="flex items-center mt-2">
+          <div id="contenedorColor" class="w-8 h-8 rounded-full border-2 border-gray-300"></div>
+          <p id="contenedorAsignado" class="ml-4 text-2xl font-bold">--</p>
+        </div>
+      </div>
+
+      <div class="info-card bg-gray-900 p-4 rounded">
+        <h3 class="font-semibold">Mensaje</h3>
+        <p id="feedbackMessage" class="italic mt-2">Esperando que se detecte un objeto...</p>
+      </div>
+
+    </div>
+  </div>
 </div>
+
+<!-- Socket.IO client -->
+<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
 
 <script>
 const video = document.getElementById('video');
 const snap = document.getElementById('snap');
 const foto = document.getElementById('videoStream');
+const status = document.getElementById('status');
 
-// Acceder a la cámara del celular
-navigator.mediaDevices.getUserMedia({ video: true })
-.then(stream => { video.srcObject = stream; })
-.catch(err => { alert('Error al acceder a la cámara: ' + err); });
+let socket = null;
+let isCapturing = false;
 
-// Tomar foto y enviar al servidor
-snap.addEventListener('click', () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext('2d').drawImage(video, 0, 0);
-    const dataURL = canvas.toDataURL('image/jpeg');
+// Start camera
+async function startCamera(){
+  try {
+    const constraints = { video: true };
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    video.srcObject = stream;
+    status.innerText = "Cámara lista";
+  } catch (e) {
+    console.error('Error getUserMedia:', e);
+    status.innerText = "Error cámara: " + (e && e.message ? e.message : e);
+    alert('Error al acceder a la cámara: ' + e + '\nSi usas móvil, asegúrate de abrir la página por HTTPS y aceptar el certificado.');
+  }
+}
+startCamera();
 
-    // Mostrar la foto en la página
-    foto.src = dataURL;
+function reloadFotoImg() {
+  foto.src = '/static/fotos/foto.jpg?t=' + Date.now();
+}
 
-    // Enviar al servidor Flask
-    fetch('/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'imageBase64=' + encodeURIComponent(dataURL)
-    }).then(res => console.log('Foto enviada al servidor'));
+function takePhotoDataURL() {
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
+  canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.9);
+}
+
+function normalizeText(s) {
+  if (!s) return "";
+  let out = s.normalize('NFD').replace(/[\u0300-\u036f]/g, "");
+  return out.toLowerCase();
+}
+
+function capFirst(s) {
+  if (!s) return s || "--";
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function formatConfidence(v) {
+  if (v === null || v === undefined) return "--%";
+  let num = Number(v);
+  if (isNaN(num)) return String(v);
+  if (num <= 1.0) {
+    return (Math.round(num * 10000) / 100) + "%";
+  }
+  return (Math.round(num * 10) / 10) + "%";
+}
+
+async function uploadDataURL(dataURL) {
+  status.innerText = "Enviando al servidor...";
+  try {
+    const params = new URLSearchParams();
+    params.append('imageBase64', dataURL);
+    const res = await fetch('/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString()
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(()=>({error:"unknown"}));
+      console.error("Upload error:", err);
+      status.innerText = "Error al subir: " + (err.error||err.detail||res.status);
+      document.getElementById("feedbackMessage").innerText = "Error al clasificar: " + (err.error || err.detail || res.status);
+      return null;
+    }
+    const data = await res.json();
+    status.innerText = "Clasificación recibida";
+    applyInferenceToUI(data);
+    reloadFotoImg();
+    return data;
+  } catch (e) {
+    console.error("Error upload:", e);
+    status.innerText = "Error al enviar";
+    document.getElementById("feedbackMessage").innerText = "Error al enviar la foto: " + e;
+    return null;
+  }
+}
+
+// Mapas de nombre (si el servidor ya manda "Botella de plástico" se usará directo)
+const materialMap = {
+  "plastico": "Botella de plástico",
+  "plástico": "Botella de plástico",
+  "papel": "Caja de leche",
+  "metal": "Lata de bebida",
+  "organico": "Tomate",
+  "orgánico": "Tomate",
+  "no_reciclable": "No reciclable",
+  "no reciclable": "No reciclable"
+};
+
+function mapMaterialName(raw) {
+  if (!raw) return "--";
+  const simple = normalizeText(raw).replace(/\s+/g,'_');
+  if (materialMap[simple]) return materialMap[simple];
+  const firstWord = normalizeText(raw).split(/\s+/)[0];
+  return materialMap[firstWord] || raw;
+}
+
+function applyInferenceToUI(data){
+  if(!data) return;
+  // Si el servidor marca is_unknown true -> tratar como no reciclable
+  const isUnknown = !!data.is_unknown;
+  const mappedMaterial = isUnknown ? "No reciclable" : mapMaterialName(data.material || "");
+  document.getElementById("materialIdentificado").innerText = mappedMaterial || "--";
+  document.getElementById("confidence").innerText = "Confianza: " + formatConfidence(data.confidence);
+  const cont = data.contenedor || "";
+  document.getElementById("contenedorAsignado").innerText = capFirst(cont);
+  document.getElementById("contenedorColor").style.backgroundColor = data.color || "#9CA3AF";
+
+  // Mensajes personalizados (solo si NO es desconocido)
+  const rewardMessages = {
+    "Botella de plástico": "¡Has ganado 200$!",
+    "Caja de leche": "¡Has ganado 100$!",
+    "Lata de bebida": "¡Has ganado 300$!",
+    "Tomate": "¡Has ganado 50$!"
+  };
+
+  if (isUnknown || mappedMaterial === "No reciclable") {
+    document.getElementById("feedbackMessage").innerText = "Objeto no identificado. Enviado a desechos no reciclables.";
+  } else {
+    const message = rewardMessages[mappedMaterial] || "Clasificación completada.";
+    document.getElementById("feedbackMessage").innerText = message;
+  }
+}
+
+// Manual snap
+snap.addEventListener('click', async () => {
+  if(isCapturing) return;
+  isCapturing = true;
+  status.innerText = "Tomando foto...";
+  const dataURL = takePhotoDataURL();
+  foto.src = dataURL;
+  await uploadDataURL(dataURL);
+  isCapturing = false;
 });
-</script>
 
+// Socket.IO
+function initSocketIO(){
+  try {
+    socket = io({ transports: ['websocket'], autoConnect: true });
+  } catch (e) {
+    console.error("Error inicializando socket.io client:", e);
+    status.innerText = "Error SocketIO";
+    return;
+  }
+
+  socket.on('connect', () => {
+    console.info("Socket.IO conectado:", socket.id);
+    status.innerText = "WebSocket conectado";
+  });
+  socket.on('connect_error', (err) => {
+    console.error("connect_error", err);
+    status.innerText = "Error conexión WS";
+  });
+  socket.on('disconnect', (reason) => {
+    console.warn("Socket desconectado:", reason);
+    status.innerText = "WS desconectado";
+  });
+
+  socket.on('trigger_capture', async (payload) => {
+    console.info("trigger_capture recibido:", payload);
+    if(isCapturing) return;
+    isCapturing = true;
+    status.innerText = "Trigger: tomando foto...";
+    const dataURL = takePhotoDataURL();
+    foto.src = dataURL;
+    await uploadDataURL(dataURL);
+    isCapturing = false;
+  });
+
+  socket.on('inference', (payload) => {
+    console.info("inference recibido:", payload);
+    applyInferenceToUI(payload);
+    reloadFotoImg();
+  });
+}
+
+initSocketIO();
+</script>
 </body>
 </html>
